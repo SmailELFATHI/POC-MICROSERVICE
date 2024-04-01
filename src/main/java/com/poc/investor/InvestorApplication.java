@@ -1,13 +1,16 @@
 package com.poc.investor;
 
+import com.poc.investor.config.RsaKeyProperties;
 import com.poc.investor.models.entities.Investor;
 import com.poc.investor.services.InvestorService;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 
 @SpringBootApplication
+@EnableConfigurationProperties(RsaKeyProperties.class)
 public class InvestorApplication {
 
 	public static void main(String[] args) {
