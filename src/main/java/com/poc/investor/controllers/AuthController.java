@@ -2,6 +2,8 @@ package com.poc.investor.controllers;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.oauth2.jwt.JwtClaimsSet;
 import org.springframework.security.oauth2.jwt.JwtEncoder;
@@ -18,10 +20,11 @@ import java.util.stream.Collectors;
 public class AuthController {
     private static final Logger LOGGER = LoggerFactory.getLogger(AuthController.class);
 
-
+    private AuthenticationManager authenticationManager;
     private final JwtEncoder jwtEncoder;
 
-    public AuthController(JwtEncoder jwtEncoder) {
+    public AuthController(AuthenticationManager authenticationManager, JwtEncoder jwtEncoder) {
+        this.authenticationManager = authenticationManager;
         this.jwtEncoder = jwtEncoder;
     }
 
@@ -40,8 +43,23 @@ public class AuthController {
      * @param authentication Retrieve information of users already logged in.
      * @return
      */
+    @PostMapping("/tokenBasic")
+    public Map<String, String> requestForTokenBasic(Authentication authentication) {
+        JwtClaimsSet jwtClaimsSet = getJwtClaimsSet(authentication);
+        //generate JWT from jwtEncoder by the set of jwtClaims
+        return Map.of("accessToken", jwtEncoder.encode(JwtEncoderParameters.from(jwtClaimsSet)).getTokenValue());
+    }
+
     @PostMapping("/token")
-    public Map<String, String> requestForToken(Authentication authentication) {
+    public Map<String, String> requestForToken(String username,String password) {
+        Authentication authentication = authenticationManager.authenticate(new UsernamePasswordAuthenticationToken(username, password));
+
+        JwtClaimsSet jwtClaimsSet = getJwtClaimsSet(authentication);
+        //generate JWT from jwtEncoder by the set of jwtClaims
+        return Map.of("accessToken", jwtEncoder.encode(JwtEncoderParameters.from(jwtClaimsSet)).getTokenValue());
+    }
+
+    private static JwtClaimsSet getJwtClaimsSet(Authentication authentication) {
         Instant instant = Instant.now();
         String scopes = authentication.getAuthorities().stream().map(grantedAuthority -> grantedAuthority.getAuthority()).collect(Collectors.joining(" "));
         JwtClaimsSet jwtClaimsSet = JwtClaimsSet.builder().subject(authentication.getName())//userName already logged in
@@ -49,8 +67,7 @@ public class AuthController {
                 .expiresAt(instant.plus(5, ChronoUnit.MINUTES)).issuer("investor")//name of application that generate token
                 .claim("scope", scopes)//Authorities of users logged in
                 .build();
-        //generate JWT from jwtEncoder by the set of jwtClaims
-        return Map.of("accessToken",jwtEncoder.encode(JwtEncoderParameters.from(jwtClaimsSet)).getTokenValue());
+        return jwtClaimsSet;
     }
 
 

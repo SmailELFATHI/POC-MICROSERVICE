@@ -8,7 +8,11 @@ import com.nimbusds.jose.jwk.source.JWKSource;
 import com.nimbusds.jose.proc.SecurityContext;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.ProviderManager;
+import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
 import org.springframework.security.config.Customizer;
+import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
 import org.springframework.security.config.annotation.method.configuration.EnableGlobalMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.oauth2.server.resource.OAuth2ResourceServerConfigurer;
@@ -34,19 +38,20 @@ public class SecurityConfig {
         this.passwordEncoder = passwordEncoder;
     }
 
-    @Bean
-    public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
-        return http
-                .csrf(csrf -> csrf.disable())
-                //	.headers().frameOptions().disable().and()
-                //.authorizeRequests(auth -> auth.antMatchers("/h2-console/**").permitAll() )
-                //.authorizeRequests(auth -> auth.antMatchers("/idToken/**","/token/**").permitAll() )
-                .oauth2ResourceServer(OAuth2ResourceServerConfigurer::jwt)
-                .authorizeRequests(auth -> auth.anyRequest().authenticated())
-                .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-                .httpBasic(Customizer.withDefaults())
-                .build();
+    //@Bean
+    //old manner
+    public AuthenticationManager authenticationManager(AuthenticationConfiguration authenticationConfiguration) throws Exception {
+        return authenticationConfiguration.getAuthenticationManager();
     }
+
+    @Bean
+    public AuthenticationManager authenticationManager(UserDetailsService userDetailsService){
+        var authProvider = new DaoAuthenticationProvider();
+        authProvider.setPasswordEncoder(passwordEncoder);
+        authProvider.setUserDetailsService(userDetailsService);
+        return new ProviderManager(authProvider);
+    }
+
 
     @Bean
     UserDetailsService userDetailsService() {
@@ -58,7 +63,20 @@ public class SecurityConfig {
         );
         return userDetailsService;
     }
-
+    @Bean
+    public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
+        return http
+                .csrf(csrf -> csrf.disable())
+                //	.headers().frameOptions().disable().and()
+                //.authorizeRequests(auth -> auth.antMatchers("/h2-console/**").permitAll() )
+                //.authorizeRequests(auth -> auth.antMatchers("/idToken/**","/token/**").permitAll() )
+                .oauth2ResourceServer(OAuth2ResourceServerConfigurer::jwt)
+                .authorizeRequests(auth -> auth.antMatchers("/token/**").permitAll())
+                .authorizeRequests(auth -> auth.anyRequest().authenticated())
+                .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                .httpBasic(Customizer.withDefaults())
+                .build();
+    }
     @Bean
     JwtDecoder jwtDecoder() {
         return NimbusJwtDecoder.withPublicKey(rsaKeyProperties.publicKey()).build();
