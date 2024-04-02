@@ -9,6 +9,7 @@ import com.nimbusds.jose.proc.SecurityContext;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.Customizer;
+import org.springframework.security.config.annotation.method.configuration.EnableGlobalMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.oauth2.server.resource.OAuth2ResourceServerConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
@@ -22,6 +23,7 @@ import org.springframework.security.provisioning.InMemoryUserDetailsManager;
 import org.springframework.security.web.SecurityFilterChain;
 
 @Configuration
+@EnableGlobalMethodSecurity(prePostEnabled = true)
 public class SecurityConfig {
     private RsaKeyProperties rsaKeyProperties;
 
@@ -45,7 +47,12 @@ public class SecurityConfig {
 
     @Bean
     UserDetailsService userDetailsService() {
-        UserDetailsService userDetailsService = new InMemoryUserDetailsManager(User.withUsername("smail").password("{noop}1234").authorities("read").build());
+        UserDetailsService userDetailsService = new InMemoryUserDetailsManager(
+                User.withUsername("admin").password("{noop}1234").authorities("ADMIN").build(),
+                User.withUsername("user1").password("{noop}1234").authorities("USER").build(),
+                User.withUsername("user2").password("{noop}1234").authorities("USER").build(),
+                User.withUsername("superadmin").password("{noop}1234").authorities("ADMIN", "USER").build()
+        );
         return userDetailsService;
     }
 
