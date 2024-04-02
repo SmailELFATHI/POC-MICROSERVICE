@@ -15,6 +15,7 @@ import org.springframework.security.config.annotation.web.configurers.oauth2.ser
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.core.userdetails.User;
 import org.springframework.security.core.userdetails.UserDetailsService;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.oauth2.jwt.JwtEncoder;
 import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
@@ -26,9 +27,11 @@ import org.springframework.security.web.SecurityFilterChain;
 @EnableGlobalMethodSecurity(prePostEnabled = true)
 public class SecurityConfig {
     private RsaKeyProperties rsaKeyProperties;
+    private PasswordEncoder passwordEncoder;
 
-    public SecurityConfig(RsaKeyProperties rsaKeyProperties) {
+    public SecurityConfig(RsaKeyProperties rsaKeyProperties, PasswordEncoder passwordEncoder) {
         this.rsaKeyProperties = rsaKeyProperties;
+        this.passwordEncoder = passwordEncoder;
     }
 
     @Bean
@@ -48,10 +51,10 @@ public class SecurityConfig {
     @Bean
     UserDetailsService userDetailsService() {
         UserDetailsService userDetailsService = new InMemoryUserDetailsManager(
-                User.withUsername("admin").password("{noop}1234").authorities("ADMIN").build(),
-                User.withUsername("user1").password("{noop}1234").authorities("USER").build(),
-                User.withUsername("user2").password("{noop}1234").authorities("USER").build(),
-                User.withUsername("superadmin").password("{noop}1234").authorities("ADMIN", "USER").build()
+                User.withUsername("admin").password(passwordEncoder.encode("1234")).authorities("ADMIN").build(),
+                User.withUsername("user1").password(passwordEncoder.encode("1234")).authorities("USER").build(),
+                User.withUsername("user2").password(passwordEncoder.encode("1234")).authorities("USER").build(),
+                User.withUsername("superadmin").password(passwordEncoder.encode("1234")).authorities("ADMIN", "USER").build()
         );
         return userDetailsService;
     }
