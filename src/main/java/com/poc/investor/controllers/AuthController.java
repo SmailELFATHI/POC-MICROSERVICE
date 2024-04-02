@@ -13,6 +13,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.stream.Collectors;
 
@@ -21,7 +22,7 @@ public class AuthController {
     private static final Logger LOGGER = LoggerFactory.getLogger(AuthController.class);
 
     private AuthenticationManager authenticationManager;
-    private final JwtEncoder jwtEncoder;
+    private static JwtEncoder jwtEncoder = null;
 
     public AuthController(AuthenticationManager authenticationManager, JwtEncoder jwtEncoder) {
         this.authenticationManager = authenticationManager;
@@ -45,29 +46,59 @@ public class AuthController {
      */
     @PostMapping("/tokenBasic")
     public Map<String, String> requestForTokenBasic(Authentication authentication) {
-        JwtClaimsSet jwtClaimsSet = getJwtClaimsSet(authentication);
         //generate JWT from jwtEncoder by the set of jwtClaims
-        return Map.of("accessToken", jwtEncoder.encode(JwtEncoderParameters.from(jwtClaimsSet)).getTokenValue());
+        return getJwtClaimsSet(authentication, false);
     }
 
+    /**
+     * link
+     * curl --location 'http://localhost:1717/token' \
+     * --header 'Content-Type: application/x-www-form-urlencoded' \
+     * --data-urlencode 'username=superadmin' \
+     * --data-urlencode 'password=1234' \
+     * --data-urlencode 'withRefreshToken=true'
+     *
+     * @param username
+     * @param password
+     * @param withRefreshToken
+     * @return
+     */
     @PostMapping("/token")
-    public Map<String, String> requestForToken(String username,String password) {
+    public Map<String, String> requestForToken(String username, String password, boolean withRefreshToken) {
         Authentication authentication = authenticationManager.authenticate(new UsernamePasswordAuthenticationToken(username, password));
-
-        JwtClaimsSet jwtClaimsSet = getJwtClaimsSet(authentication);
         //generate JWT from jwtEncoder by the set of jwtClaims
-        return Map.of("accessToken", jwtEncoder.encode(JwtEncoderParameters.from(jwtClaimsSet)).getTokenValue());
+        return getJwtClaimsSet(authentication, withRefreshToken);
     }
 
-    private static JwtClaimsSet getJwtClaimsSet(Authentication authentication) {
+
+    private static Map<String, String> getJwtClaimsSet(Authentication authentication, Boolean withRefreshToken) {
         Instant instant = Instant.now();
+        String subject = authentication.getName();
+        String issuer = "investor";
         String scopes = authentication.getAuthorities().stream().map(grantedAuthority -> grantedAuthority.getAuthority()).collect(Collectors.joining(" "));
         JwtClaimsSet jwtClaimsSet = JwtClaimsSet.builder().subject(authentication.getName())//userName already logged in
+                .subject(subject)
                 .issuedAt(instant)//created datetime
-                .expiresAt(instant.plus(5, ChronoUnit.MINUTES)).issuer("investor")//name of application that generate token
+                .expiresAt(instant.plus(withRefreshToken ? 1 : 5, ChronoUnit.MINUTES))
+                .issuer(issuer)//name of application that generate token
                 .claim("scope", scopes)//Authorities of users logged in
                 .build();
-        return jwtClaimsSet;
+        Map<String, String> tokens=new HashMap<>();
+        
+        tokens.put("accessToken", jwtEncoder.encode(JwtEncoderParameters.from(jwtClaimsSet)).getTokenValue());
+
+        if (withRefreshToken) {
+            // no scopes here
+            JwtClaimsSet jwtClaimsSetRefresh = JwtClaimsSet.builder()
+                    .subject(subject)
+                    .issuedAt(instant)
+                    .expiresAt(instant.plus(5, ChronoUnit.MINUTES))
+                    .issuer(issuer)
+                    .build();
+            String jwtRefreshToken = jwtEncoder.encode(JwtEncoderParameters.from(jwtClaimsSetRefresh)).getTokenValue();
+            tokens.put("refreshToken", jwtRefreshToken);
+        }
+        return tokens;
     }
 
 
