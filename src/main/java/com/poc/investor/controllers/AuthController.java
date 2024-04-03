@@ -2,17 +2,21 @@ package com.poc.investor.controllers;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
-import org.springframework.security.oauth2.jwt.JwtClaimsSet;
-import org.springframework.security.oauth2.jwt.JwtEncoder;
-import org.springframework.security.oauth2.jwt.JwtEncoderParameters;
+import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.security.core.userdetails.UserDetailsService;
+import org.springframework.security.oauth2.jwt.*;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -23,10 +27,14 @@ public class AuthController {
 
     private AuthenticationManager authenticationManager;
     private static JwtEncoder jwtEncoder = null;
+    private JwtDecoder jwtDecoder;
+    private static UserDetailsService userDetailsService;
 
-    public AuthController(AuthenticationManager authenticationManager, JwtEncoder jwtEncoder) {
+    public AuthController(AuthenticationManager authenticationManager, JwtEncoder jwtEncoder, JwtDecoder jwtDecoder, UserDetailsService userDetailsService) {
         this.authenticationManager = authenticationManager;
         this.jwtEncoder = jwtEncoder;
+        this.jwtDecoder = jwtDecoder;
+        this.userDetailsService = userDetailsService;
     }
 
     /**
@@ -47,7 +55,7 @@ public class AuthController {
     @PostMapping("/tokenBasic")
     public Map<String, String> requestForTokenBasic(Authentication authentication) {
         //generate JWT from jwtEncoder by the set of jwtClaims
-        return getJwtClaimsSet(authentication, false);
+        return getJwtClaimsSet(authentication, null, null, false, null);
     }
 
     /**
@@ -64,27 +72,57 @@ public class AuthController {
      * @return
      */
     @PostMapping("/token")
-    public Map<String, String> requestForToken(String username, String password, boolean withRefreshToken) {
-        Authentication authentication = authenticationManager.authenticate(new UsernamePasswordAuthenticationToken(username, password));
+    public ResponseEntity<Map<String, String>> requestForToken(String grantType, String username, String password, boolean withRefreshToken, String refreshToken) {
+        Authentication authentication = null;
         //generate JWT from jwtEncoder by the set of jwtClaims
-        return getJwtClaimsSet(authentication, withRefreshToken);
+        Jwt decodeJWT = null;
+        if(grantType ==null){
+            return new ResponseEntity<>(Map.of("errorMessage", "grantType  Token is required"), HttpStatus.UNAUTHORIZED);
+        }
+        if (grantType.equals("password")) {
+            authentication = authenticationManager.authenticate(
+                    new UsernamePasswordAuthenticationToken(username, password)
+            );
+        } else if (grantType.equals("refreshToken")) {
+            if (refreshToken == null) {
+                return new ResponseEntity<>(Map.of("errorMessage", "Refresh  Token is required"), HttpStatus.UNAUTHORIZED);
+            }
+            try {
+                decodeJWT = jwtDecoder.decode(refreshToken);
+            } catch (JwtException e) {
+                return new ResponseEntity<>(Map.of("errorMessage", e.getMessage()), HttpStatus.UNAUTHORIZED);
+            }
+        }else{
+            return new ResponseEntity<>(Map.of("errorMessage", "value of grantType is incorrect"), HttpStatus.UNAUTHORIZED);
+        }
+        return new ResponseEntity<>(getJwtClaimsSet(authentication, decodeJWT, grantType, withRefreshToken, refreshToken), HttpStatus.OK);
     }
 
 
-    private static Map<String, String> getJwtClaimsSet(Authentication authentication, Boolean withRefreshToken) {
+    private static Map<String, String> getJwtClaimsSet(Authentication authentication, Jwt decodeJWT, String grantType, Boolean withRefreshToken, String refreshToken) {
         Instant instant = Instant.now();
-        String subject = authentication.getName();
-        String issuer = "investor";
-        String scopes = authentication.getAuthorities().stream().map(grantedAuthority -> grantedAuthority.getAuthority()).collect(Collectors.joining(" "));
-        JwtClaimsSet jwtClaimsSet = JwtClaimsSet.builder().subject(authentication.getName())//userName already logged in
+        String issuer = "investor" ;
+        String subject = null;
+        String scopes = null;
+        if (authentication != null) {
+            subject = authentication.getName();
+            scopes = authentication.getAuthorities().stream().map(grantedAuthority -> grantedAuthority.getAuthority()).collect(Collectors.joining(" "));
+        } else if (decodeJWT != null) {
+            subject = decodeJWT.getSubject();
+            UserDetails userDetails = userDetailsService.loadUserByUsername(subject);
+            Collection<? extends GrantedAuthority> authorities = userDetails.getAuthorities();
+            scopes = authorities.stream().map(auth -> auth.getAuthority()).collect(Collectors.joining(" "));
+        }
+
+        JwtClaimsSet jwtClaimsSet = JwtClaimsSet.builder()//userName already logged in
                 .subject(subject)
                 .issuedAt(instant)//created datetime
                 .expiresAt(instant.plus(withRefreshToken ? 1 : 5, ChronoUnit.MINUTES))
                 .issuer(issuer)//name of application that generate token
                 .claim("scope", scopes)//Authorities of users logged in
                 .build();
-        Map<String, String> tokens=new HashMap<>();
-        
+        Map<String, String> tokens = new HashMap<>();
+
         tokens.put("accessToken", jwtEncoder.encode(JwtEncoderParameters.from(jwtClaimsSet)).getTokenValue());
 
         if (withRefreshToken) {
